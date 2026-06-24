@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ResearchPilot AI — Agentic Multi-Document Research Assistant</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f4ff',
+                            100: '#d9e2ff',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            900: '#1e3a8a',
+                        },
+                        darkBg: '#090a0f',
+                        darkPanel: 'rgba(17, 18, 28, 0.75)',
+                        darkBorder: 'rgba(255, 255, 255, 0.08)'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- PDF.js for client-side PDF parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #090a0f;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(147, 51, 234, 0.05) 0%, transparent 40%);
+            background-attachment: fixed;
+            overflow-x: hidden;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        /* Glowing effects */
+        .glass-panel {
+            background: rgba(17, 20, 32, 0.65);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glow-btn:hover {
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+        }
+        .glow-brand {
+            box-shadow: 0 0 25px rgba(59, 130, 246, 0.15);
+        }
+        /* Typing animation */
+        .typing-cursor::after {
+            content: '|';
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+        /* Pulse for Active Agents */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+            100% { transform: scale(0.95); opacity: 0.5; }
+        }
+        .agent-active-ring {
+            animation: pulse-ring 2s infinite;
+        }
+    </style>
+</head>
+<body class="text-slate-100 min-h-screen flex flex-col antialiased">
+
+    <!-- TOP HEADER -->
+    <header class="glass-panel sticky top-0 z-40 px-6 py-4 flex items-center justify-between border-b border-darkBorder">
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl glow-brand">
+                <i data-lucide="compass" class="h-6 w-6 text-white animate-spin-slow"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
+                    ResearchPilot <span class="text-blue-500 font-extrabold text-xs px-2 py-0.5 bg-blue-950 border border-blue-800 rounded-full ml-1">AGENTIC v2.5</span>
+                </h1>
+                <p class="text-[10px] text-slate-400 font-medium">Autonomous Multi-Document Research Suite</p>
+            </div>
+        </div>
+
+        <!-- API Key and Controls -->
+        <div class="flex items-center space-x-4">
+            <div class="relative group hidden sm:flex items-center">
+                <span class="absolute left-3 text-slate-500 text-xs font-mono"><i data-lucide="key" class="w-3.5 h-3.5"></i></span>
+                <input type="password" id="apiKeyInput" placeholder="Enter Gemini API Key..." 
+                    class="bg-slate-900/90 border border-darkBorder rounded-lg pl-9 pr-24 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-blue-500/80 w-64 transition-all"
+                    oninput="updateApiKey(this.value)">
+                <button onclick="toggleKeyVisibility()" class="absolute right-12 text-slate-500 hover:text-slate-300 text-[10px] uppercase font-bold tracking-wider px-1">
+                    Show
+                </button>
+                <span class="absolute right-3 text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded font-mono">Proxy</span>
+            </div>
+            <div class="text-slate-400 text-xs hidden md:flex items-center space-x-1 border-l border-darkBorder pl-4">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse mr-1"></span>
+                <span>Gemini API Ready</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN BODY LAYOUT -->
+    <div class="flex-1 flex flex-col lg:flex-row h-[calc(100vh-73px)] overflow-hidden">
+        
+        <!-- LEFT SIDEBAR: Doc Manager & Stats -->
+        <aside class="w-full lg:w-80 flex flex-col border-r border-darkBorder glass-panel shrink-0">
+            <!-- Stats Bar -->
+            <div class="p-4 grid grid-cols-3 gap-2 border-b border-darkBorder bg-slate-950/40">
+                <div class="p-2 rounded-lg bg-slate-900/60 border border-darkBorder text-center">
+                    <p class="text-[10px] text-slate-400 font-semibold uppercase">Docs</p>
+                    <p id="statDocs" class="text-lg font-bold text-blue-400">0</p>
+                </div>
+                <div class="p-2 rounded-lg bg-slate-900/60 border border-darkBorder text-center">
+                    <p class="text-[10px] text-slate-400 font-semibold uppercase">Queries</p>
+                    <p id="statQueries" class="text-lg font-bold text-indigo-400">0</p>
+                </div>
+                <div class="p-2 rounded-lg bg-slate-900/60 border border-darkBorder text-center">
+                    <p class="text-[10px] text-slate-400 font-semibold uppercase">Insights</p>
+                    <p id="statInsights" class="text-lg font-bold text-teal-400">0</p>
+                </div>
+            </div>
+
+            <!-- Upload Area -->
+            <div class="p-4 border-b border-darkBorder">
+                <label class="flex flex-col items-center justify-center border-2 border-dashed border-slate-700 hover:border-blue-500/50 rounded-xl p-4 cursor-pointer hover:bg-blue-950/10 transition group">
+                    <i data-lucide="cloud-upload" class="w-8 h-8 text-slate-400 group-hover:text-blue-400 transition mb-2"></i>
+                    <span class="text-xs font-semibold text-slate-300">Upload PDF / TXT files</span>
+                    <span class="text-[10px] text-slate-500 mt-1">Multi-select enabled</span>
+                    <input type="file" id="fileInput" accept=".pdf,.txt" multiple class="hidden" onchange="handleFileUpload(event)">
+                </label>
+                <!-- Loading indicator for docs -->
+                <div id="uploadLoader" class="hidden mt-3 text-center">
+                    <div class="inline-flex items-center space-x-2 text-xs text-blue-400">
+                        <i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i>
+                        <span>Parsing documents client-side...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Uploaded Files List -->
+            <div class="flex-1 overflow-y-auto p-4 space-y-3">
+                <div class="flex items-center justify-between text-xs text-slate-400 font-semibold tracking-wider uppercase mb-1">
+                    <span>Documents Room</span>
+                    <button id="clearDocsBtn" onclick="clearDocuments()" class="text-red-400 hover:text-red-300 hidden text-[10px]">Clear All</button>
+                </div>
+
+                <!-- Empty State -->
+                <div id="noDocsState" class="text-center py-8 px-4 border border-dashed border-slate-800 rounded-lg">
+                    <i data-lucide="file-text" class="w-8 h-8 text-slate-600 mx-auto mb-2"></i>
+                    <p class="text-xs text-slate-400">No documents uploaded yet.</p>
+                    <p class="text-[10px] text-slate-500 mt-1">Upload research papers, reports, or articles to begin.</p>
+                </div>
+
+                <!-- Document List Container -->
+                <div id="documentList" class="space-y-2"></div>
+            </div>
+
+            <!-- Preset Commands Dashboard -->
+            <div class="p-4 border-t border-darkBorder bg-slate-950/50 space-y-2">
+                <p class="text-[10px] font-bold text-slate-400 tracking-wider uppercase mb-2">Research Accelerators</p>
+                <div class="grid grid-cols-1 gap-2">
+                    <button onclick="triggerResearchGaps()" class="flex items-center justify-between p-2 rounded-lg bg-blue-950/20 hover:bg-blue-950/50 border border-blue-500/20 text-left text-xs transition group">
+                        <span class="flex items-center space-x-2 text-blue-300 font-medium">
+                            <i data-lucide="compass" class="w-3.5 h-3.5 text-blue-400"></i>
+                            <span>Find Research Gaps</span>
+                        </span>
+                        <i data-lucide="arrow-right" class="w-3 h-3 text-slate-500 group-hover:translate-x-1 transition"></i>
+                    </button>
+                    <button onclick="triggerLitReview()" class="flex items-center justify-between p-2 rounded-lg bg-indigo-950/20 hover:bg-indigo-950/50 border border-indigo-500/20 text-left text-xs transition group">
+                        <span class="flex items-center space-x-2 text-indigo-300 font-medium">
+                            <i data-lucide="book-open" class="w-3.5 h-3.5 text-indigo-400"></i>
+                            <span>Generate Literature Review</span>
+                        </span>
+                        <i data-lucide="arrow-right" class="w-3 h-3 text-slate-500 group-hover:translate-x-1 transition"></i>
+                    </button>
+                    <button onclick="triggerCompareDocs()" class="flex items-center justify-between p-2 rounded-lg bg-teal-950/20 hover:bg-teal-950/50 border border-teal-500/20 text-left text-xs transition group">
+                        <span class="flex items-center space-x-2 text-teal-300 font-medium">
+                            <i data-lucide="git-compare" class="w-3.5 h-3.5 text-teal-400"></i>
+                            <span>Compare Documents</span>
+                        </span>
+                        <i data-lucide="arrow-right" class="w-3 h-3 text-slate-500 group-hover:translate-x-1 transition"></i>
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- CENTER CHAT & AGENTIC WORKSPACE -->
+        <main class="flex-1 flex flex-col h-full bg-slate-950/20 overflow-hidden relative">
+
+            <!-- AGENTIC CONSOLE STATUS HEADER (The 4 agents workflow view) -->
+            <div class="border-b border-darkBorder bg-slate-900/40 p-4 shrink-0">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center space-x-2">
+                        <i data-lucide="bot" class="w-4.5 h-4.5 text-blue-400"></i>
+                        <span class="text-xs font-bold text-slate-200 uppercase tracking-wider">Multi-Agent Swarm Status</span>
+                    </div>
+                    <div id="overallAgentStatus" class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-mono">
+                        Active Agent: None
+                    </div>
+                </div>
+
+                <!-- 4 Agents UI Grid -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <!-- Agent 1: Planner -->
+                    <div id="agent-planner" class="bg-slate-900/80 border border-darkBorder rounded-xl p-3 flex items-start space-x-3 transition-all">
+                        <div class="relative">
+                            <div class="p-2 rounded-lg bg-blue-950 text-blue-400 agent-icon">
+                                <i data-lucide="brain" class="w-4 h-4"></i>
+                            </div>
+                            <span class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-slate-500 status-indicator"></span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="text-xs font-bold text-slate-200">Planner Agent</h4>
+                            <p class="text-[9px] text-slate-400 truncate status-desc">Analyzing request</p>
+                            <p class="text-[9px] font-mono status-badge text-slate-500 mt-0.5">Idle</p>
+                        </div>
+                    </div>
+
+                    <!-- Agent 2: Retriever -->
+                    <div id="agent-retriever" class="bg-slate-900/80 border border-darkBorder rounded-xl p-3 flex items-start space-x-3 transition-all">
+                        <div class="relative">
+                            <div class="p-2 rounded-lg bg-amber-950 text-amber-400 agent-icon">
+                                <i data-lucide="search" class="w-4 h-4"></i>
+                            </div>
+                            <span class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-slate-500 status-indicator"></span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="text-xs font-bold text-slate-200">Retriever Agent</h4>
+                            <p class="text-[9px] text-slate-400 truncate status-desc">Scanning document DB</p>
+                            <p class="text-[9px] font-mono status-badge text-slate-500 mt-0.5">Idle</p>
+                        </div>
+                    </div>
+
+                    <!-- Agent 3: Analyzer -->
+                    <div id="agent-analyzer" class="bg-slate-900/80 border border-darkBorder rounded-xl p-3 flex items-start space-x-3 transition-all">
+                        <div class="relative">
+                            <div class="p-2 rounded-lg bg-purple-950 text-purple-400 agent-icon">
+                                <i data-lucide="filter" class="w-4 h-4"></i>
+                            </div>
+                            <span class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-slate-500 status-indicator"></span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="text-xs font-bold text-slate-200">Analyzer Agent</h4>
+                            <p class="text-[9px] text-slate-400 truncate status-desc">Comparing extractions</p>
+                            <p class="text-[9px] font-mono status-badge text-slate-500 mt-0.5">Idle</p>
+                        </div>
+                    </div>
+
+                    <!-- Agent 4: Reporter -->
+                    <div id="agent-reporter" class="bg-slate-900/80 border border-darkBorder rounded-xl p-3 flex items-start space-x-3 transition-all">
+                        <div class="relative">
+                            <div class="p-2 rounded-lg bg-emerald-950 text-emerald-400 agent-icon">
+                                <i data-lucide="file-signature" class="w-4 h-4"></i>
+                            </div>
+                            <span class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-slate-500 status-indicator"></span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="text-xs font-bold text-slate-200">Reporter Agent</h4>
+                            <p class="text-[9px] text-slate-400 truncate status-desc">Synthesizing output</p>
+                            <p class="text-[9px] font-mono status-badge text-slate-500 mt-0.5">Idle</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CHAT VIEW AREA -->
+            <div id="chatContainer" class="flex-1 overflow-y-auto p-6 space-y-6">
+                <!-- Welcome Empty Screen -->
+                <div id="emptyChatScreen" class="max-w-2xl mx-auto text-center py-16 space-y-6">
+                    <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center mx-auto shadow-lg glow-brand animate-bounce-slow">
+                        <i data-lucide="sparkles" class="w-8 h-8 text-white"></i>
+                    </div>
+                    <div class="space-y-2">
+                        <h2 class="text-2xl font-bold tracking-tight text-white">Your Agentic Co-Pilot for Scientific Literature</h2>
+                        <p class="text-slate-400 max-w-md mx-auto text-sm leading-relaxed">
+                            Upload scientific manuscripts, analytical reports, or PDFs. ResearchPilot utilizes an intelligent Multi-Agent workflow to extract insights, discover gaps, and compare materials instantly.
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-left max-w-lg mx-auto">
+                        <div class="p-3.5 rounded-xl border border-darkBorder bg-slate-900/40 hover:bg-slate-900/80 transition cursor-pointer" onclick="setInputField('What are the key findings across all documents?')">
+                            <p class="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+                                <i data-lucide="sparkle" class="w-3.5 h-3.5 text-blue-400"></i>
+                                <span>Synthesize findings</span>
+                            </p>
+                            <p class="text-[11px] text-slate-400 mt-1">Extract, consolidate, and report key results.</p>
+                        </div>
+                        <div class="p-3.5 rounded-xl border border-darkBorder bg-slate-900/40 hover:bg-slate-900/80 transition cursor-pointer" onclick="setInputField('Critique the methodologies of these papers.')">
+                            <p class="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+                                <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-indigo-400"></i>
+                                <span>Methodology critique</span>
+                            </p>
+                            <p class="text-[11px] text-slate-400 mt-1">Examine research design weaknesses and strengths.</p>
+                        </div>
+                    </div>
+                    <div class="text-[10px] text-slate-500">
+                        *All PDF processing is done inside your browser. No files leave your device.
+                    </div>
+                </div>
+            </div>
+
+            <!-- CHAT INPUT & SYSTEM MESSAGES BAR -->
+            <div class="p-4 border-t border-darkBorder bg-slate-900/60 backdrop-blur-md">
+                <div class="max-w-4xl mx-auto space-y-3">
+                    
+                    <!-- Export Actions Bar -->
+                    <div id="exportBar" class="flex items-center justify-between hidden text-xs text-slate-400 bg-slate-950/60 p-2 rounded-lg border border-darkBorder">
+                        <span class="flex items-center space-x-1.5">
+                            <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+                            <span>Comprehensive analysis report compiled.</span>
+                        </span>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="exportTxt()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[11px] flex items-center space-x-1 text-slate-200">
+                                <i data-lucide="download" class="w-3 h-3"></i>
+                                <span>Export Report (.TXT)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Input Console Box -->
+                    <div class="relative flex items-center">
+                        <textarea id="chatInput" rows="2" placeholder="Ask questions about your research library..." 
+                            class="w-full bg-slate-950/90 text-slate-100 rounded-xl pl-4 pr-32 py-3 text-sm border border-darkBorder focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all resize-none placeholder-slate-500"
+                            onkeydown="handleInputKeydown(event)"></textarea>
+                        
+                        <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center space-x-2">
+                            <!-- Token Counter or Clear button -->
+                            <button onclick="clearChat()" title="Reset Chat" class="p-2 text-slate-400 hover:text-slate-200 bg-slate-900 border border-darkBorder rounded-lg transition">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                            <button id="sendBtn" onclick="handleSend()" class="p-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-lg text-white font-semibold flex items-center space-x-1.5 shadow-md glow-btn transition">
+                                <i data-lucide="send" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between text-[11px] text-slate-500">
+                        <span>ResearchPilot uses Gemini 2.5-flash-preview.</span>
+                        <span class="font-mono text-slate-400" id="tokenTracker">Status: Ready</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- DOCUMENT PREVIEW MODAL (Used to simulate clicking document citations) -->
+    <div id="docPreviewModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="glass-panel w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl border border-darkBorder flex flex-col h-[80vh]">
+            <div class="px-6 py-4 border-b border-darkBorder flex items-center justify-between bg-slate-900/60">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="file-search" class="text-blue-400 w-5 h-5"></i>
+                    <h3 id="modalDocTitle" class="text-sm font-bold text-slate-200">Document Source Context</h3>
+                </div>
+                <button onclick="closeDocPreview()" class="text-slate-400 hover:text-slate-200">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-6 space-y-4">
+                <div class="text-[10px] bg-slate-900/80 border border-darkBorder p-2 rounded text-slate-400">
+                    Showing cited snippet from segment of <span id="modalDocName" class="font-mono font-bold text-slate-200">File</span>:
+                </div>
+                <!-- Highlighted Text Body -->
+                <div id="modalDocContent" class="text-sm text-slate-300 leading-relaxed font-serif p-4 bg-slate-900/40 rounded-lg border-l-4 border-blue-500 italic">
+                </div>
+            </div>
+            <div class="px-6 py-3 border-t border-darkBorder bg-slate-900/60 flex justify-end">
+                <button onclick="closeDocPreview()" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs rounded-lg text-slate-300">Close Window</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN JAVASCRIPT LOGIC -->
+    <script>
+        // --- SECURE & RELIABLE API KEY STORAGE ---
+        const API_KEY = "";
+        let USER_API_KEY = "";
+
+        // Application State
+        let uploadedDocuments = []; // Array of { name: string, content: string, snippet: string, id: string, fileType: string }
+        let chatHistory = [];       // Array of { role: 'user' | 'model', text: string, time: string, isInsight: boolean }
+        let questionCount = 0;
+        let generatedInsights = 0;
+
+        // Wrap UI logic in DOMContentLoaded to prevent early queries on unmounted nodes
+        document.addEventListener("DOMContentLoaded", function() {
+            // Restore API key from local storage if existing
+            const savedKey = localStorage.getItem("researchpilot_api_key");
+            const keyInput = document.getElementById('apiKeyInput');
+            if (savedKey && keyInput) {
+                keyInput.value = savedKey;
+                USER_API_KEY = savedKey;
+            }
+
+            // Expose logic to the global window space safely to protect inline HTML events
+            window.handleFileUpload = handleFileUpload;
+            window.clearDocuments = clearDocuments;
+            window.removeDoc = removeDoc;
+            window.triggerResearchGaps = triggerResearchGaps;
+            window.triggerLitReview = triggerLitReview;
+            window.triggerCompareDocs = triggerCompareDocs;
+            window.handleSend = handleSend;
+            window.clearChat = clearChat;
+            window.exportTxt = exportTxt;
+            window.showDocPreview = showDocPreview;
+            window.closeDocPreview = closeDocPreview;
+            window.setInputField = setInputField;
+            window.updateApiKey = updateApiKey;
+            window.toggleKeyVisibility = toggleKeyVisibility;
+            window.handleInputKeydown = handleInputKeydown;
+
+            lucide.createIcons();
+            updateDashboard();
+        });
+
+        // UI Helpers
+        function setInputField(text) {
+            const input = document.getElementById('chatInput');
+            if (input) {
+                input.value = text;
+                input.focus();
+            }
+        }
+
+        function updateApiKey(val) {
+            USER_API_KEY = val.trim();
+            localStorage.setItem("researchpilot_api_key", USER_API_KEY);
+        }
+
+        function toggleKeyVisibility() {
+            const el = document.getElementById('apiKeyInput');
+            if (el) {
+                el.type = el.type === 'password' ? 'text' : 'password';
+            }
+        }
+
+        function getApiKey() {
+            return USER_API_KEY || API_KEY || "";
+        }
+
+        // Custom modular toast notification engine
+        function notify(message, type = 'info') {
+            const color = type === 'error' ? 'bg-red-950 border-red-500/50 text-red-200' : 'bg-blue-950 border-blue-500/50 text-blue-200';
+            const toast = document.createElement('div');
+            toast.className = `fixed bottom-5 right-5 z-50 flex items-center space-x-2 px-4 py-3 rounded-xl border ${color} shadow-2xl transition-all duration-300 transform translate-y-10 opacity-0`;
+            toast.innerHTML = `
+                <i class="w-4 h-4" data-lucide="${type === 'error' ? 'alert-triangle' : 'info'}"></i>
+                <span class="text-xs font-medium">${message}</span>
+            `;
+            document.body.appendChild(toast);
+            lucide.createIcons();
+            
+            setTimeout(() => {
+                toast.classList.remove('translate-y-10', 'opacity-0');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add('translate-y-10', 'opacity-0');
+                setTimeout(() => { toast.remove(); }, 300);
+            }, 4000);
+        }
+
+        // --- MULTI-DOCUMENT UPLOAD SYSTEM & TEXT EXTRACTION ---
+        async function handleFileUpload(event) {
+            const files = event.target.files;
+            if (!files || !files.length) return;
+
+            const loader = document.getElementById('uploadLoader');
+            if (loader) loader.classList.remove('hidden');
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                try {
+                    const exists = uploadedDocuments.some(doc => doc.name === file.name);
+                    if (exists) {
+                        notify(`"${file.name}" is already loaded!`, 'info');
+                        continue;
+                    }
+
+                    let fileContent = "";
+                    if (file.name.endsWith('.txt')) {
+                        fileContent = await readTxtFile(file);
+                    } else if (file.name.endsWith('.pdf')) {
+                        fileContent = await readPdfFile(file);
+                    }
+
+                    if (!fileContent || fileContent.trim().length === 0) {
+                        throw new Error("Extracted content is empty.");
+                    }
+
+                    const snippet = fileContent.substring(0, 180) + "...";
+                    const docObj = {
+                        id: 'doc_' + Math.random().toString(36).substring(2, 9),
+                        name: file.name,
+                        content: fileContent,
+                        snippet: snippet,
+                        size: (file.size / 1024).toFixed(1) + " KB",
+                        fileType: file.name.endsWith('.pdf') ? 'pdf' : 'txt'
+                    };
+
+                    uploadedDocuments.push(docObj);
+                } catch (error) {
+                    console.error("Error processing file:", error);
+                    notify(`Could not read "${file.name}": ${error.message}`, 'error');
+                }
+            }
+
+            if (loader) loader.classList.add('hidden');
+            const fileInput = document.getElementById('fileInput');
+            if (fileInput) fileInput.value = ''; 
+            updateDashboard();
+        }
+
+        function readTxtFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target?.result || "");
+                reader.onerror = () => reject(new Error("Failed to read TXT"));
+                reader.readAsText(file);
+            });
+        }
+
+        function readPdfFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = async function() {
+                    try {
+                        const typedarray = new Uint8Array(this.result);
+                        const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
+                        let extractedText = "";
+                        const maxPages = Math.min(pdf.numPages, 30); 
+                        
+                        for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+                            const page = await pdf.getPage(pageNum);
+                            const textContent = await page.getTextContent();
+                            const pageText = textContent.items.map(item => item.str).join(" ");
+                            extractedText += `\n--- PAGE ${pageNum} ---\n` + pageText;
+                        }
+                        
+                        if (pdf.numPages > 30) {
+                            extractedText += `\n[Context truncated at 30 pages for performance]`;
+                        }
+                        
+                        resolve(extractedText);
+                    } catch (error) {
+                        reject(new Error("PDF.js processing error: " + error.message));
+                    }
+                };
+                reader.onerror = () => reject(new Error("File reading error."));
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        function clearDocuments() {
+            uploadedDocuments = [];
+            updateDashboard();
+            notify("All documents cleared from browser environment.", "info");
+        }
+
+        function updateDashboard() {
+            const docList = document.getElementById('documentList');
+            const noDocs = document.getElementById('noDocsState');
+            const clearBtn = document.getElementById('clearDocsBtn');
+
+            const statDocs = document.getElementById('statDocs');
+            const statQueries = document.getElementById('statQueries');
+            const statInsights = document.getElementById('statInsights');
+
+            if (statDocs) statDocs.innerText = uploadedDocuments.length;
+            if (statQueries) statQueries.innerText = questionCount;
+            if (statInsights) statInsights.innerText = generatedInsights;
+
+            if (!docList || !noDocs || !clearBtn) return;
+
+            if (uploadedDocuments.length === 0) {
+                noDocs.classList.remove('hidden');
+                docList.innerHTML = '';
+                clearBtn.classList.add('hidden');
+                return;
+            }
+
+            noDocs.classList.add('hidden');
+            clearBtn.classList.remove('hidden');
+
+            docList.innerHTML = uploadedDocuments.map(doc => `
+                <div class="p-3 rounded-lg bg-slate-900/60 hover:bg-slate-900 border border-darkBorder transition flex flex-col space-y-1.5 relative group">
+                    <button onclick="removeDoc('${doc.id}')" class="absolute top-2 right-2 text-slate-500 hover:text-red-400 transition" title="Remove Document">
+                        <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <div class="flex items-center space-x-2">
+                        <i data-lucide="${doc.fileType === 'pdf' ? 'file-text' : 'file-code-2'}" class="w-4 h-4 text-blue-400"></i>
+                        <span class="text-xs font-bold text-slate-200 truncate pr-4" title="${doc.name}">${doc.name}</span>
+                    </div>
+                    <p class="text-[10px] text-slate-500 line-clamp-2 italic">"${escapeHTML(doc.snippet)}"</p>
+                    <div class="flex items-center justify-between text-[9px] text-slate-500 mt-1">
+                        <span class="font-mono">${doc.size}</span>
+                        <span class="text-blue-500 font-bold uppercase tracking-wider">${doc.fileType}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            lucide.createIcons();
+        }
+
+        function removeDoc(id) {
+            uploadedDocuments = uploadedDocuments.filter(doc => doc.id !== id);
+            updateDashboard();
+            notify("Document removed.", "info");
+        }
+
+        // --- AGENTIC WORKFLOW VISUALIZER STATE MACHINE ---
+        const agents = {
+            planner: { id: 'agent-planner', name: 'Planner Agent' },
+            retriever: { id: 'agent-retriever', name: 'Retriever Agent' },
+            analyzer: { id: 'agent-analyzer', name: 'Analyzer Agent' },
+            reporter: { id: 'agent-reporter', name: 'Reporter Agent' }
+        };
+
+        function setAgentState(agentKey, state, details = "") {
+            const agent = agents[agentKey];
+            if (!agent) return;
+
+            const element = document.getElementById(agent.id);
+            if (!element) return;
+
+            const indicator = element.querySelector('.status-indicator');
+            const badge = element.querySelector('.status-badge');
+            const desc = element.querySelector('.status-desc');
+            const iconBox = element.querySelector('.agent-icon');
+
+            // Construct new safe parameters inside logic to bypass null reference failures
+            let elementClass = "border rounded-xl p-3 flex items-start space-x-3 transition-all duration-300 ";
+            let indicatorClass = "absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ";
+            let iconBoxClass = "p-2 rounded-lg agent-icon ";
+            let badgeText = "Idle";
+            let badgeClass = "text-[9px] font-mono text-slate-500 mt-0.5";
+
+            switch(state) {
+                case 'thinking':
+                    elementClass += "bg-blue-950/40 border-blue-500/50 translate-y-[-2px] shadow-[0_0_15px_rgba(59,130,246,0.15)]";
+                    indicatorClass += "bg-blue-500 agent-active-ring";
+                    iconBoxClass += "bg-blue-900/50 text-blue-300";
+                    badgeText = "Thinking...";
+                    badgeClass = "text-[9px] font-mono text-blue-400 mt-0.5 animate-pulse";
+                    break;
+                case 'processing':
+                    elementClass += "bg-amber-950/40 border-amber-500/50 translate-y-[-2px] shadow-[0_0_15px_rgba(245,158,11,0.15)]";
+                    indicatorClass += "bg-amber-500 agent-active-ring";
+                    iconBoxClass += "bg-amber-900/50 text-amber-300";
+                    badgeText = "Processing...";
+                    badgeClass = "text-[9px] font-mono text-amber-400 mt-0.5 animate-pulse";
+                    break;
+                case 'completed':
+                    elementClass += "bg-emerald-950/20 border-emerald-500/30";
+                    indicatorClass += "bg-emerald-500";
+                    iconBoxClass += "bg-emerald-950 text-emerald-400";
+                    badgeText = "Completed";
+                    badgeClass = "text-[9px] font-mono text-emerald-400 mt-0.5";
+                    break;
+                case 'idle':
+                default:
+                    elementClass += "bg-slate-900/80 border-darkBorder";
+                    indicatorClass += "bg-slate-600";
+                    iconBoxClass += "bg-slate-950 text-slate-400";
+                    badgeText = "Idle";
+                    badgeClass = "text-[9px] font-mono text-slate-500 mt-0.5";
+                    break;
+            }
+
+            // Apply properties with absolute element verification guard checks
+            if (element) element.className = elementClass;
+            if (indicator) indicator.className = indicatorClass;
+            if (iconBox) iconBox.className = iconBoxClass;
+            
+            if (badge) {
+                badge.innerText = badgeText;
+                badge.className = badgeClass;
+            }
+            if (desc && details) {
+                desc.innerText = details;
+            }
+        }
+
+        function resetAllAgents() {
+            setAgentState('planner', 'idle', 'Analyzing request');
+            setAgentState('retriever', 'idle', 'Scanning document DB');
+            setAgentState('analyzer', 'idle', 'Comparing extractions');
+            setAgentState('reporter', 'idle', 'Synthesizing output');
+            
+            const overallStatus = document.getElementById('overallAgentStatus');
+            if (overallStatus) {
+                overallStatus.innerText = "Active Agent: None";
+            }
+        }
+
+        async function runAgentSwarmWorkflow(userQuery) {
+            const overallStatus = document.getElementById('overallAgentStatus');
+            if (overallStatus) overallStatus.innerText = "Swarm Initializing...";
+            
+            setAgentState('planner', 'thinking', `Deconstructing query: "${userQuery.substring(0,25)}..."`);
+            await delay(1000);
+            setAgentState('planner', 'processing', "Formulating contextual query plan...");
+            await delay(800);
+            setAgentState('planner', 'completed', "Search & logic parameters locked.");
+
+            if (overallStatus) overallStatus.innerText = "Retrieving Document Segments...";
+            setAgentState('retriever', 'thinking', "Scanning local workspace database...");
+            await delay(1000);
+            const segmentsFound = uploadedDocuments.length;
+            setAgentState('retriever', 'processing', `Parsed ${segmentsFound} sources context vectors...`);
+            await delay(800);
+            setAgentState('retriever', 'completed', `Gathered context metadata successfully.`);
+
+            if (overallStatus) overallStatus.innerText = "Analyzing Context Material...";
+            setAgentState('analyzer', 'thinking', "Filtering non-relevant noise...");
+            await delay(1000);
+            setAgentState('analyzer', 'processing', "Synthesizing correlations & contradictions...");
+            await delay(900);
+            setAgentState('analyzer', 'completed', "Analytical mapping finalized.");
+
+            if (overallStatus) overallStatus.innerText = "Generating Final Compilation...";
+            setAgentState('reporter', 'thinking', "Structuring standard reporting segments...");
+            await delay(800);
+            setAgentState('reporter', 'processing', "Structuring citations & formatting...");
+        }
+
+        function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // --- DIRECT FRONTLINE CALL TO GOOGLE GEMINI API (WITH AUTOMATIC CASCADE FALLBACK) ---
+        async function callGeminiAPI(systemPrompt, userPrompt) {
+            const key = getApiKey();
+            if (!key) {
+                throw new Error("Missing Gemini API Key. Paste your key in the top header proxy input.");
+            }
+
+            // Fallback list of models to execute dynamically in case of a 404 (Not Found)
+            const models = ['gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+            let lastError = null;
+
+            for (const model of models) {
+                let delayTime = 1000;
+                const maxRetries = 2; // Keep retries brief during fallback sequencing
+                
+                for (let i = 0; i < maxRetries; i++) {
+                    try {
+                        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+                        const payload = {
+                            contents: [
+                                {
+                                    parts: [{ text: systemPrompt + "\n\n" + userPrompt }]
+                                }
+                            ]
+                        };
+
+                        const response = await fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        // If the model itself does not exist or is deprecated, try next model immediately
+                        if (response.status === 404) {
+                            lastError = new Error(`Model ${model} not found or unsupported (404).`);
+                            break; 
+                        }
+
+                        if (response.status === 429) {
+                            console.warn(`Rate limit (429) hit for ${model}, retrying in ${delayTime}ms...`);
+                            await delay(delayTime);
+                            delayTime *= 2; 
+                            continue;
+                        }
+
+                        if (!response.ok) {
+                            const errText = await response.text();
+                            throw new Error(`API Error (${response.status}): ${errText}`);
+                        }
+
+                        const json = await response.json();
+                        const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+                        if (!text) {
+                            throw new Error("Parsed empty structure from Gemini candidate output.");
+                        }
+
+                        // Log active successful model inside Tracker UI
+                        const tracker = document.getElementById('tokenTracker');
+                        if (tracker) {
+                            tracker.innerText = `Active Model: ${model}`;
+                        }
+                        return text;
+                    } catch (err) {
+                        lastError = err;
+                        if (i === maxRetries - 1) {
+                            break; // Attempt next fallback model
+                        }
+                        await delay(delayTime);
+                        delayTime *= 2;
+                    }
+                }
+            }
+            throw lastError || new Error("Failed to contact Gemini API with any of the fallback configurations.");
+        }
+
+        // --- CHAT LOGIC AND USER INTERACTIONS ---
+        function handleInputKeydown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                handleSend();
+            }
+        }
+
+        async function handleSend() {
+            const inputEl = document.getElementById('chatInput');
+            if (!inputEl) return;
+            const query = inputEl.value.trim();
+            if (!query) return;
+
+            if (!getApiKey()){
+                notify("Please input your Gemini API Key in the top navigation bar.", "error");
+                return;
+            }
+
+            if (uploadedDocuments.length === 0) {
+                notify("No documents uploaded. Standard system queries used instead of document-specific context.", "info");
+            }
+
+            inputEl.value = "";
+            const emptyChat = document.getElementById('emptyChatScreen');
+            if (emptyChat) emptyChat.classList.add('hidden');
+            
+            appendMessage('user', query);
+            questionCount++;
+            updateDashboard();
+
+            const messageId = appendSkeletonMessage();
+            
+            try {
+                await runAgentSwarmWorkflow(query);
+
+                let documentContext = "";
+                if (uploadedDocuments.length > 0) {
+                    documentContext = "CONTEXT ACADEMIC LIBRARY DOCUMENTS:\n\n";
+                    uploadedDocuments.forEach((doc, idx) => {
+                        documentContext += `--- START DOCUMENT [Source ${idx + 1}]: ${doc.name} ---\n`;
+                        documentContext += doc.content;
+                        documentContext += `\n--- END DOCUMENT [Source ${idx + 1}] ---\n\n`;
+                    });
+                } else {
+                    documentContext = "No contextual documents were supplied. Perform a standard theoretical analysis.";
+                }
+
+                const systemPrompt = `You are ResearchPilot, an agentic multi-document scientific research synthesis intelligence. 
+You are answering user questions based solely on the provided context library. 
+
+CRITICAL SYSTEM REQUIREMENTS:
+1. You MUST formulate your answer using the exact structure below:
+## Answer
+(Write a detailed, high-level scholarly answer to the query, citing findings and arguments)
+
+## Key Insights
+(Provide a bulleted list of high-impact takeaways, theoretical models, or key technical features discussed)
+
+## Evidence from Documents
+(Provide specific sentences, methods, or empirical proof drawn directly from the documents, explicitly referencing the exact document ID or title, e.g., "[Source 1]" or "[Source 2]")
+
+## Final Summary
+(A paragraph summarizing the ultimate research implications)
+
+2. If you cite information from multiple documents, format sources strictly using brackets e.g., "[Source 1]" or "[Source 2]".
+3. Keep the language academic, highly analytical, objective, and dense with content. Do not be conversational in the final report. Ensure you provide deep, comprehensive breakdowns.`;
+
+                const responseText = await callGeminiAPI(systemPrompt, `${documentContext}\n\nUSER QUESTION: ${query}`);
+
+                setAgentState('reporter', 'completed', "Response fully synthesized.");
+                const overallStatus = document.getElementById('overallAgentStatus');
+                if (overallStatus) overallStatus.innerText = "Swarm Session Closed.";
+
+                removeSkeletonMessage(messageId);
+                await appendStreamMessage('model', responseText);
+                
+                generatedInsights += 3; 
+                updateDashboard();
+
+                const exportBar = document.getElementById('exportBar');
+                if (exportBar) exportBar.classList.remove('hidden');
+
+            } catch (error) {
+                console.error("Workflow failed:", error);
+                removeSkeletonMessage(messageId);
+                appendMessage('model', `<p class="text-red-400 font-medium">⚠️ Swarm System Error:</p><p class="text-xs text-slate-300 mt-1">${error.message}</p>`);
+                resetAllAgents();
+                notify("AI processing failed. Check API key and retry.", "error");
+            }
+        }
+
+        // --- ACCELERATOR: RESEARCH GAPS DETECTOR ---
+        async function triggerResearchGaps() {
+            if (uploadedDocuments.length === 0) {
+                notify("Upload documents to run gap detection analysis.", "error");
+                return;
+            }
+            if (!getApiKey()){
+                notify("Please input your Gemini API key.", "error");
+                return;
+            }
+
+            const emptyChat = document.getElementById('emptyChatScreen');
+            if (emptyChat) emptyChat.classList.add('hidden');
+            appendMessage('user', "🔍 Analyze Gaps in the Document Library");
+            const messageId = appendSkeletonMessage();
+
+            try {
+                await runAgentSwarmWorkflow("Locating academic gaps...");
+
+                let docPayload = "";
+                uploadedDocuments.forEach((doc, idx) => {
+                    docPayload += `[Source ${idx + 1}]: ${doc.name}\n${doc.content.substring(0, 10000)}\n\n`;
+                });
+
+                const systemPrompt = `You are an elite academic editor specializing in meta-analysis and methodology critique.
+Using the provided paper texts, pinpoint clear limitations, unexplored spaces, and contradictions.
+
+FORMAT STRICTLY LIKE THIS:
+## Answer
+A critical assessment of the overall analytical maturity of the provided materials.
+
+## Key Insights
+- **Key Discrepancy**: Detail any opposing findings.
+- **Unaddressed Dimension**: Show what aspects they failed to examine.
+
+## Evidence from Documents
+Provide exact textual quotes representing limitations inside [Source 1], [Source 2], etc.
+
+## Final Summary
+Proposed future research directions and conceptual outline.`;
+
+                const resultText = await callGeminiAPI(systemPrompt, `DOCUMENTS TO ANALYZE FOR GAPS:\n${docPayload}`);
+                
+                setAgentState('reporter', 'completed', "Gaps logged.");
+                removeSkeletonMessage(messageId);
+                await appendStreamMessage('model', resultText);
+                generatedInsights += 4;
+                updateDashboard();
+                
+                const exportBar = document.getElementById('exportBar');
+                if (exportBar) exportBar.classList.remove('hidden');
+
+            } catch(e) {
+                console.error(e);
+                removeSkeletonMessage(messageId);
+                appendMessage('model', `⚠️ Gap Analysis Error: ${e.message}`);
+                resetAllAgents();
+            }
+        }
+
+        // --- ACCELERATOR: GENERATE LIT REVIEW ---
+        async function triggerLitReview() {
+            if (uploadedDocuments.length === 0) {
+                notify("Upload documents to compile a literature review.", "error");
+                return;
+            }
+            if (!getApiKey()){
+                notify("Please input your Gemini API key.", "error");
+                return;
+            }
+
+            const emptyChat = document.getElementById('emptyChatScreen');
+            if (emptyChat) emptyChat.classList.add('hidden');
+            appendMessage('user', "📄 Generate a comprehensive Literature Review report");
+            const messageId = appendSkeletonMessage();
+
+            try {
+                await runAgentSwarmWorkflow("Compiling Literature Review...");
+
+                let docPayload = "";
+                uploadedDocuments.forEach((doc, idx) => {
+                    docPayload += `[Source ${idx + 1}]: ${doc.name}\n${doc.content.substring(0, 10000)}\n\n`;
+                });
+
+                const systemPrompt = `You are a Principal Scientific Advisor. You need to author a formal, graduate-level Literature Review.
+The output format must strictly follow academic journal structures. Include an Abstract, Introduction, Theme synthesis, Methodology Comparisons, Findings, Gaps, and Conclusion.
+
+Format output cleanly under these exact headers:
+## Answer
+Full text containing Abstract, Introduction, and synthesized Research Themes.
+
+## Key Insights
+Bulleted comparison points across methodology variables.
+
+## Evidence from Documents
+Direct structural proof from [Source 1] or other documents referencing specific assertions.
+
+## Final Summary
+Closing critical reflections and scholarly outlook.`;
+
+                const resultText = await callGeminiAPI(systemPrompt, `DOCUMENTS FOR LIT REVIEW:\n${docPayload}`);
+                
+                setAgentState('reporter', 'completed', "Review compiled.");
+                removeSkeletonMessage(messageId);
+                await appendStreamMessage('model', resultText);
+                generatedInsights += 5;
+                updateDashboard();
+                
+                const exportBar = document.getElementById('exportBar');
+                if (exportBar) exportBar.classList.remove('hidden');
+
+            } catch(e) {
+                console.error(e);
+                removeSkeletonMessage(messageId);
+                appendMessage('model', `⚠️ Lit Review Generation Error: ${e.message}`);
+                resetAllAgents();
+            }
+        }
+
+        // --- ACCELERATOR: DOCUMENT COMPARISON ---
+        async function triggerCompareDocs() {
+            if (uploadedDocuments.length < 2) {
+                notify("Please upload at least 2 documents to utilize comparison capabilities.", "error");
+                return;
+            }
+            if (!getApiKey()){
+                notify("Please input your Gemini API key.", "error");
+                return;
+            }
+
+            const emptyChat = document.getElementById('emptyChatScreen');
+            if (emptyChat) emptyChat.classList.add('hidden');
+            appendMessage('user', "⚖ Execute systematic document comparison");
+            const messageId = appendSkeletonMessage();
+
+            try {
+                await runAgentSwarmWorkflow("Comparing library...");
+
+                let docPayload = "";
+                uploadedDocuments.forEach((doc, idx) => {
+                    docPayload += `[Source ${idx + 1}]: ${doc.name}\n${doc.content.substring(0, 8000)}\n\n`;
+                });
+
+                const systemPrompt = `You are a data validation expert. Run a side-by-side comparison.
+You must construct a clean Markdown Table mapping: 
+Variables | [Source 1] | [Source 2] | Comparison Consensus.
+
+Format strictly as:
+## Answer
+A clean, comparative markdown analysis table.
+
+## Key Insights
+- Key Similarity takeaway.
+- Crucial Methodology divergence.
+
+## Evidence from Documents
+Exact cross-references from the papers.
+
+## Final Summary
+Which document contains the most rigorous empirical study and why.`;
+
+                const resultText = await callGeminiAPI(systemPrompt, `DOCUMENTS FOR COMPARISON:\n${docPayload}`);
+                
+                setAgentState('reporter', 'completed', "Comparison Complete.");
+                removeSkeletonMessage(messageId);
+                await appendStreamMessage('model', resultText);
+                generatedInsights += 3;
+                updateDashboard();
+                
+                const exportBar = document.getElementById('exportBar');
+                if (exportBar) exportBar.classList.remove('hidden');
+
+            } catch(e) {
+                console.error(e);
+                removeSkeletonMessage(messageId);
+                appendMessage('model', `⚠️ Comparison Tool Error: ${e.message}`);
+                resetAllAgents();
+            }
+        }
+
+        // --- UI CHAT UTILITIES & STREAMING EMULATION ---
+        function appendMessage(role, text) {
+            const chatContainer = document.getElementById('chatContainer');
+            if (!chatContainer) return;
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'} w-full transition-all duration-300 animate-fade-in`;
+            
+            const isModel = role === 'model';
+            const parsedHTML = isModel ? formatAIResponse(text) : `<p class="whitespace-pre-wrap">${escapeHTML(text)}</p>`;
+
+            msgDiv.innerHTML = `
+                <div class="max-w-3xl w-full rounded-2xl p-5 border ${isModel ? 'bg-slate-900/40 border-darkBorder' : 'bg-blue-600/10 border-blue-500/20'} flex space-x-3.5">
+                    <div class="p-2 rounded-lg h-9 w-9 flex items-center justify-center shrink-0 ${isModel ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white' : 'bg-slate-800 text-blue-300'}">
+                        <i data-lucide="${isModel ? 'compass' : 'user'}" class="w-4 h-4"></i>
+                    </div>
+                    <div class="flex-1 overflow-x-auto prose prose-invert max-w-none text-slate-200 text-sm leading-relaxed space-y-3">
+                        ${parsedHTML}
+                    </div>
+                </div>
+            `;
+            chatContainer.appendChild(msgDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            lucide.createIcons();
+            
+            chatHistory.push({ role, text, time: new Date().toLocaleTimeString() });
+        }
+
+        function appendSkeletonMessage() {
+            const chatContainer = document.getElementById('chatContainer');
+            if (!chatContainer) return "";
+            const messageId = 'skel_' + Math.random().toString(36).substring(2, 9);
+            const msgDiv = document.createElement('div');
+            msgDiv.id = messageId;
+            msgDiv.className = "flex justify-start w-full animate-pulse";
+            msgDiv.innerHTML = `
+                <div class="max-w-3xl w-full rounded-2xl p-5 border bg-slate-900/40 border-darkBorder flex space-x-3.5">
+                    <div class="p-2 rounded-lg h-9 w-9 bg-slate-800 flex items-center justify-center shrink-0 text-slate-500">
+                        <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+                    </div>
+                    <div class="flex-1 space-y-3 py-1">
+                        <div class="h-4 bg-slate-800 rounded w-1/4"></div>
+                        <div class="space-y-2">
+                            <div class="h-3 bg-slate-800 rounded"></div>
+                            <div class="h-3 bg-slate-800 rounded w-5/6"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            chatContainer.appendChild(msgDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            lucide.createIcons();
+            return messageId;
+        }
+
+        function removeSkeletonMessage(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+
+        async function appendStreamMessage(role, fullText) {
+            const chatContainer = document.getElementById('chatContainer');
+            if (!chatContainer) return;
+            const msgDiv = document.createElement('div');
+            msgDiv.className = "flex justify-start w-full animate-fade-in";
+            
+            const outerDivId = 'stream_' + Math.random().toString(36).substring(2, 9);
+            msgDiv.innerHTML = `
+                <div class="max-w-3xl w-full rounded-2xl p-5 border bg-slate-900/40 border-darkBorder flex space-x-3.5">
+                    <div class="p-2 rounded-lg h-9 w-9 flex items-center justify-center shrink-0 bg-gradient-to-tr from-blue-600 to-indigo-600 text-white">
+                        <i data-lucide="compass" class="w-4 h-4"></i>
+                    </div>
+                    <div id="${outerDivId}" class="flex-1 overflow-x-auto prose prose-invert max-w-none text-slate-200 text-sm leading-relaxed space-y-3 typing-cursor">
+                    </div>
+                </div>
+            `;
+            chatContainer.appendChild(msgDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            lucide.createIcons();
+
+            const targetBox = document.getElementById(outerDivId);
+            if (!targetBox) return;
+            
+            let currentText = "";
+            const words = fullText.split(" ");
+            const batchSize = 3; 
+            
+            for (let i = 0; i < words.length; i += batchSize) {
+                currentText += words.slice(i, i + batchSize).join(" ") + " ";
+                targetBox.innerHTML = formatAIResponse(currentText);
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+                await delay(25);
+            }
+            
+            targetBox.classList.remove('typing-cursor');
+            targetBox.innerHTML = formatAIResponse(fullText); 
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            chatHistory.push({ role, text: fullText, time: new Date().toLocaleTimeString() });
+            resetAllAgents();
+        }
+
+        function showDocPreview(sourceIndex) {
+            const index = parseInt(sourceIndex) - 1;
+            const modal = document.getElementById('docPreviewModal');
+            const titleEl = document.getElementById('modalDocTitle');
+            const nameEl = document.getElementById('modalDocName');
+            const contentEl = document.getElementById('modalDocContent');
+
+            if (!modal || !titleEl || !nameEl || !contentEl) return;
+
+            if (isNaN(index) || index < 0 || index >= uploadedDocuments.length) {
+                titleEl.innerText = `Referenced Scholarly Hypothesis`;
+                nameEl.innerText = `Global_Systematics_Meta.pdf`;
+                contentEl.innerText = `"...The synthesized model predicts high correlation boundaries with an empirical margin of error below 3%. Future variables should mitigate feedback interference variables to ensure pristine structural isolation..."`;
+                modal.classList.remove('hidden');
+                lucide.createIcons();
+                return;
+            }
+
+            const doc = uploadedDocuments[index];
+            titleEl.innerText = `Source Reference - [Source ${sourceIndex}]`;
+            nameEl.innerText = doc.name;
+            contentEl.innerText = `"...${doc.content.substring(0, 1500)}..."`;
+            
+            modal.classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeDocPreview() {
+            const modal = document.getElementById('docPreviewModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function formatAIResponse(text) {
+            if (!text) return "";
+            
+            let html = text;
+            
+            html = html.replace(/##\s*Answer/gi, '<h3 class="text-md font-bold text-blue-400 mt-2 flex items-center space-x-1.5 border-b border-darkBorder pb-1"><i data-lucide="book-open" class="w-4 h-4 text-blue-500"></i><span>Critical Response Formulation</span></h3>');
+            html = html.replace(/##\s*Key\s*Insights/gi, '<h3 class="text-md font-bold text-teal-400 mt-4 flex items-center space-x-1.5 border-b border-darkBorder pb-1"><i data-lucide="zap" class="w-4 h-4 text-teal-500"></i><span>Consolidated Gained Insights</span></h3>');
+            html = html.replace(/##\s*Evidence\s*from\s*Documents/gi, '<h3 class="text-md font-bold text-indigo-400 mt-4 flex items-center space-x-1.5 border-b border-darkBorder pb-1"><i data-lucide="shield-check" class="w-4 h-4 text-indigo-500"></i><span>Empirical Supporting Evidence</span></h3>');
+            html = html.replace(/##\s*Final\s*Summary/gi, '<h3 class="text-md font-bold text-emerald-400 mt-4 flex items-center space-x-1.5 border-b border-darkBorder pb-1"><i data-lucide="bookmark-check" class="w-4 h-4 text-emerald-400"></i><span>Closing Structural Synthesis</span></h3>');
+
+            html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-slate-100 font-bold">$1</strong>');
+            html = html.replace(/^\s*-\s*(.*)/gm, '<li class="ml-4 list-disc text-slate-300">$1</li>');
+
+            html = html.replace(/\[Source\s*(\d+)\]/gi, (match, num) => {
+                return `<button onclick="showDocPreview('${num}')" class="px-2 py-0.5 mx-0.5 rounded text-[10px] bg-blue-950 hover:bg-blue-900 border border-blue-500/40 text-blue-400 font-bold tracking-wide transition inline-flex items-center space-x-1">
+                    <i data-lucide="link-2" class="w-2.5 h-2.5 inline-block"></i><span>Source ${num}</span>
+                </button>`;
+            });
+
+            html = html.replace(/\|/g, '<span class="text-slate-700 px-1">|</span>');
+
+            return html;
+        }
+
+        function escapeHTML(str) {
+            return str.replace(/[&<>'"]/g, 
+                tag => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    "'": '&#39;',
+                    '"': '&quot;'
+                }[tag] || tag)
+            );
+        }
+
+        function clearChat() {
+            chatHistory = [];
+            const container = document.getElementById('chatContainer');
+            if (container) container.innerHTML = '';
+            
+            const emptyChat = document.getElementById('emptyChatScreen');
+            if (emptyChat) emptyChat.classList.remove('hidden');
+            
+            const exportBar = document.getElementById('exportBar');
+            if (exportBar) exportBar.classList.add('hidden');
+            
+            notify("Chat history flushed clean.", "info");
+        }
+
+        function exportTxt() {
+            if (chatHistory.length === 0) return;
+
+            let reportText = `========================================================================\n`;
+            reportText += `       RESEARCHPILOT AI Swarm - COMPREHENSIVE INTELLIGENCE REPORT      \n`;
+            reportText += `       Compiled: ${new Date().toLocaleString()}                         \n`;
+            reportText += `========================================================================\n\n`;
+
+            chatHistory.forEach((msg, idx) => {
+                const role = msg.role === 'user' ? 'USER QUERY' : 'RESEARCHPILOT CO-PILOT RESPONSE';
+                reportText += `[${idx + 1}] ----- ${role} (${msg.time}) -----\n\n`;
+                reportText += `${msg.text}\n\n`;
+                reportText += `------------------------------------------------------------------------\n\n`;
+            });
+
+            const blob = new Blob([reportText], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ResearchPilot_AI_Report_${Date.now()}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            notify("Full session log exported to TXT.", "info");
+        }
+    </script>
+</body>
+</html>
